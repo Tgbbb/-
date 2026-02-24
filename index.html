@@ -3,187 +3,255 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>测试机管理看板 - 支持Excel导入</title>
+    <title>设备借阅中心 - 有借有还再借不难</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 50; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); z-index: 50; backdrop-filter: blur(4px); }
         .modal.active { display: flex; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        .admin-menu { display: flex; flex-direction: column; gap: 8px; opacity: 0; pointer-events: none; transform: translateY(10px); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .admin-menu.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+        .admin-trigger { transition: transform 0.3s; }
+        .admin-trigger.open { transform: rotate(90deg); background-color: #475569 !important; }
     </style>
 </head>
-<body class="bg-slate-100 min-h-screen pb-10 font-sans">
+<body class="bg-slate-100 min-h-screen pb-24 font-sans">
 
     <div class="max-w-6xl mx-auto px-4 pt-8">
         <header class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
                 <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">设备借阅中心</h1>
-                <p class="text-slate-500 font-medium">工位自助登记终端</p>
+                <p id="snapshot-status" class="text-slate-400 text-xs mt-1 font-medium font-mono italic">数据受 7 日自动快照保护</p>
             </div>
-            <div class="flex gap-2">
-                <input type="file" id="excel-upload" accept=".xlsx, .xls" class="hidden" onchange="importExcel(this)">
-                <button onclick="document.getElementById('excel-upload').click()" class="bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-md font-bold hover:bg-emerald-700 transition active:scale-95 text-sm">
-                    📂 导入 Excel
-                </button>
-                <button onclick="openAddModal()" class="bg-indigo-600 text-white px-5 py-3 rounded-xl shadow-md font-bold hover:bg-indigo-700 transition active:scale-95 text-sm">
-                    + 单台录入
-                </button>
+            <div class="flex gap-2 justify-center">
+                <input type="file" id="excel-upload" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcel(this)">
+                <button onclick="document.getElementById('excel-upload').click()" class="bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-md font-bold hover:bg-emerald-700 transition active:scale-95 text-sm">📂 批量导入</button>
+                <button onclick="openFormModal()" class="bg-indigo-600 text-white px-5 py-3 rounded-xl shadow-md font-bold hover:bg-indigo-700 transition active:scale-95 text-sm">+ 单台录入</button>
             </div>
         </header>
 
         <div class="bg-white p-4 rounded-2xl shadow-sm mb-8 flex flex-col lg:flex-row gap-4 items-center">
             <div class="relative flex-1 w-full">
                 <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-                <input type="text" id="search-input" oninput="render()" placeholder="输入型号搜索..." 
-                    class="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                <input type="text" id="search-input" oninput="render()" placeholder="搜索设备、版本、借用人…" class="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
             </div>
-            <div class="flex gap-1 bg-slate-100 p-1 rounded-xl w-full lg:w-auto">
-                <button onclick="setFilter('all')" id="btn-all" class="flex-1 px-6 py-2 rounded-lg font-bold text-sm transition bg-indigo-600 text-white">全部</button>
-                <button onclick="setFilter('idle')" id="btn-idle" class="flex-1 px-6 py-2 rounded-lg font-bold text-sm transition text-slate-600">空闲</button>
-                <button onclick="setFilter('busy')" id="btn-busy" class="flex-1 px-6 py-2 rounded-lg font-bold text-sm transition text-slate-600">使用中</button>
+            <div class="flex gap-1 bg-slate-100 p-1 rounded-xl w-full lg:w-auto font-bold">
+                <button onclick="setFilter('all')" id="btn-all" class="flex-1 px-6 py-2 rounded-lg text-sm bg-indigo-600 text-white shadow-sm transition-all">全部</button>
+                <button onclick="setFilter('idle')" id="btn-idle" class="flex-1 px-6 py-2 rounded-lg text-sm text-slate-600 transition-all">空闲</button>
+                <button onclick="setFilter('busy')" id="btn-busy" class="flex-1 px-6 py-2 rounded-lg text-sm text-slate-600 transition-all">借出</button>
             </div>
         </div>
 
         <div id="device-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
     </div>
 
-    <div id="history-modal" class="modal items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
-            <div class="p-6 border-b flex justify-between items-center bg-slate-50">
-                <h3 id="modal-title" class="text-xl font-bold text-slate-800">历史记录</h3>
-                <button onclick="closeModal()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-500">✕</button>
+    <div class="fixed bottom-6 right-6 flex flex-col items-end gap-3 z-40">
+        <div id="admin-menu" class="admin-menu">
+            <button onclick="restoreFromSnapshot()" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold shadow-lg hover:bg-amber-700">恢复 7 日前快照</button>
+            <button onclick="document.getElementById('file-backup-import').click()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-lg hover:bg-blue-700">导入备份文件</button>
+            <button onclick="exportBackup()" class="px-4 py-2 bg-slate-500 text-white rounded-lg text-xs font-bold shadow-lg hover:bg-slate-600">手动导出备份</button>
+            <input type="file" id="file-backup-import" accept=".json" class="hidden" onchange="importBackup(this)">
+        </div>
+        <button id="admin-trigger" onclick="toggleAdminMenu()" class="admin-trigger w-12 h-12 bg-slate-800 text-white rounded-full shadow-2xl flex items-center justify-center text-xl hover:scale-110 active:scale-90 transition-all">
+            ⚙️
+        </button>
+    </div>
+
+    <div id="form-modal" class="modal items-center justify-center p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-8">
+            <h3 class="font-bold mb-4">设备信息录入</h3>
+            <input type="hidden" id="edit-id">
+            <input type="text" id="input-name" placeholder="型号" class="w-full px-4 py-3 border rounded-xl mb-3 outline-none focus:ring-2 focus:ring-indigo-500">
+            <input type="text" id="input-os" placeholder="系统版本" class="w-full px-4 py-3 border rounded-xl mb-6 outline-none focus:ring-2 focus:ring-indigo-500">
+            <button onclick="saveDeviceInfo()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black">保存信息</button>
+            <button onclick="closeModal('form-modal')" class="w-full mt-2 text-slate-400 text-sm py-2">取消</button>
+        </div>
+    </div>
+
+    <div id="action-modal" class="modal items-center justify-center p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center">
+            <div id="action-icon" class="text-4xl mb-4">👤</div>
+            <h3 id="action-title" class="text-xl font-bold mb-6">登记</h3>
+            <input type="hidden" id="action-id"><input type="hidden" id="action-type">
+            <input type="text" id="action-user" placeholder="输入姓名" class="w-full px-4 py-4 bg-slate-50 border rounded-2xl outline-none text-center font-bold text-lg mb-8 shadow-inner">
+            <div class="flex gap-3">
+                <button onclick="closeModal('action-modal')" class="flex-1 py-4 bg-slate-100 rounded-2xl font-bold text-slate-500">取消</button>
+                <button id="action-confirm-btn" onclick="confirmAction()" class="flex-1 py-4 text-white rounded-2xl font-bold transition-all active:scale-95">确认</button>
             </div>
-            <div id="modal-content" class="p-6 overflow-y-auto flex-1 no-scrollbar"></div>
+        </div>
+    </div>
+
+    <div id="history-modal" class="modal items-center justify-center p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh] overflow-hidden">
+            <div class="p-6 border-b flex justify-between bg-slate-50 items-center rounded-t-[2rem]"><h3 id="hist-title" class="font-bold">操作记录</h3><button onclick="closeModal('history-modal')" class="text-slate-400 p-2">✕</button></div>
+            <div id="hist-content" class="p-6 overflow-y-auto space-y-3 bg-white no-scrollbar"></div>
         </div>
     </div>
 
     <script>
-        let devices = JSON.parse(localStorage.getItem('phone_manager_local')) || [];
-        let currentFilter = 'all';
+        const DB_NAME = 'DeviceManagerDB_V7';
+        const STORES = { DATA: 'devices', SNAPSHOT: 'snapshot', CONFIG: 'config' };
+        let db, devices = [], currentFilter = 'all';
 
-        // === 新增：Excel 导入逻辑 ===
-        function importExcel(input) {
-            const file = input.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
-                const json = XLSX.utils.sheet_to_json(worksheet);
-
-                if (json.length === 0) {
-                    alert("Excel 似乎是空的");
-                    return;
-                }
-
-                // 转换数据并合并到现有列表
-                const newDevices = json.map(row => ({
-                    id: Date.now() + Math.random(),
-                    name: row['设备名称'] || row['型号'] || '未知设备',
-                    status: 'idle',
-                    currentUser: '',
-                    borrowTime: '',
-                    history: []
-                }));
-
-                devices = [...devices, ...newDevices];
-                render();
-                alert(`成功导入 ${newDevices.length} 台设备！`);
-                input.value = ''; // 清除上传记录
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        // === 之前的逻辑 (部分省略，保持一致) ===
-        function setFilter(type) {
-            currentFilter = type;
-            ['all', 'idle', 'busy'].forEach(t => {
-                const btn = document.getElementById(`btn-${t}`);
-                btn.className = t === type ? 
-                    'flex-1 px-6 py-2 rounded-lg font-bold text-sm transition bg-indigo-600 text-white' : 
-                    'flex-1 px-6 py-2 rounded-lg font-bold text-sm transition text-slate-600';
+        const initDB = () => {
+            return new Promise((res) => {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = (e) => {
+                    db = e.target.result;
+                    Object.values(STORES).forEach(s => { if(!db.objectStoreNames.contains(s)) db.createObjectStore(s, s === STORES.CONFIG ? {} : { keyPath: 'id' }); });
+                };
+                req.onsuccess = (e) => { db = e.target.result; res(); };
             });
-            render();
+        };
+
+        async function runAutoSnapshot() {
+            const tx = db.transaction([STORES.CONFIG, STORES.DATA, STORES.SNAPSHOT], 'readwrite');
+            const configStore = tx.objectStore(STORES.CONFIG);
+            configStore.get('last_snap_time').onsuccess = (e) => {
+                const lastSnap = e.target.result || 0;
+                const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+                if (Date.now() - lastSnap > SEVEN_DAYS) {
+                    const snapStore = tx.objectStore(STORES.SNAPSHOT);
+                    snapStore.clear();
+                    tx.objectStore(STORES.DATA).getAll().onsuccess = (ev) => {
+                        ev.target.result.forEach(item => snapStore.put(item));
+                        configStore.put(Date.now(), 'last_snap_time');
+                        updateSnapUI(Date.now());
+                    };
+                } else { updateSnapUI(lastSnap); }
+            };
         }
 
-        function render() {
-            const list = document.getElementById('device-list');
-            const keyword = document.getElementById('search-input').value.toLowerCase();
-            list.innerHTML = '';
+        function updateSnapUI(ts) {
+            document.getElementById('snapshot-status').innerText = ts ? `快照保护中 (上次自动存盘: ${new Date(ts).toLocaleDateString()})` : "数据库就绪";
+        }
 
+        function toggleAdminMenu() {
+            document.getElementById('admin-menu').classList.toggle('show');
+            document.getElementById('admin-trigger').classList.toggle('open');
+        }
+
+        function restoreFromSnapshot() {
+            if (!confirm("确定要恢复到 7 天前的快照吗？")) return;
+            const tx = db.transaction([STORES.DATA, STORES.SNAPSHOT], 'readwrite');
+            tx.objectStore(STORES.SNAPSHOT).getAll().onsuccess = (e) => {
+                const data = e.target.result;
+                if (!data.length) return alert("暂无可用快照");
+                const store = tx.objectStore(STORES.DATA);
+                store.clear(); data.forEach(i => store.put(i));
+                tx.oncomplete = () => window.location.reload();
+            };
+        }
+
+        function importBackup(input) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = JSON.parse(e.target.result);
+                const tx = db.transaction(STORES.DATA, 'readwrite');
+                const store = tx.objectStore(STORES.DATA);
+                store.clear(); data.forEach(i => store.put(i));
+                tx.oncomplete = () => window.location.reload();
+            };
+            reader.readAsText(input.files[0]);
+        }
+
+        function exportBackup() {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([JSON.stringify(devices, null, 2)], {type:'application/json'}));
+            a.download = `Backup_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+        }
+
+        async function sync() { db.transaction(STORES.DATA, 'readonly').objectStore(STORES.DATA).getAll().onsuccess = (e) => { devices = e.target.result || []; render(); }; }
+        function save(d) { db.transaction(STORES.DATA, 'readwrite').objectStore(STORES.DATA).put(JSON.parse(JSON.stringify(d))); }
+        
+        // 渲染函数 (包含筛选逻辑)
+        function render() {
+            const list = document.getElementById('device-list'), kw = document.getElementById('search-input').value.toLowerCase();
+            list.innerHTML = '';
+            
             const filtered = devices.filter(d => {
-                const matchesSearch = d.name.toLowerCase().includes(keyword);
-                const matchesFilter = (currentFilter === 'all') || 
-                                     (currentFilter === 'idle' && d.status === 'idle') || 
-                                     (currentFilter === 'busy' && d.status === 'busy');
+                const matchesSearch = (d.name + d.os + d.currentUser).toLowerCase().includes(kw);
+                const matchesFilter = currentFilter === 'all' || d.status === currentFilter;
                 return matchesSearch && matchesFilter;
             });
 
-            filtered.forEach(device => {
-                const isIdle = device.status === 'idle';
+            filtered.forEach(d => {
+                const isIdle = d.status === 'idle';
                 list.innerHTML += `
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border-2 ${isIdle ? 'border-transparent' : 'border-amber-100'} transition">
-                        <div class="flex justify-between items-start mb-6">
-                            <h3 class="text-lg font-black text-slate-800">${device.name}</h3>
-                            <button onclick="deleteDevice(${device.id})" class="text-slate-300 hover:text-red-500 text-xs">删除</button>
+                <div class="bg-white rounded-[2rem] p-6 shadow-sm border-4 ${isIdle?'border-transparent':'border-amber-400'} transition-all hover:shadow-md">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex-1">
+                            <h3 class="text-xl font-black text-slate-800 break-all leading-tight">${d.name}</h3>
+                            <p class="text-xs text-indigo-600 font-bold mt-1">${d.os||'未知版本'}</p>
                         </div>
-                        <div class="mb-6 h-12 flex items-center">
-                            ${!isIdle ? `<div class="text-sm font-bold text-slate-700">👤 ${device.currentUser} <span class="text-[10px] text-slate-400 font-normal ml-2">${device.borrowTime}</span></div>` : `<p class="text-slate-300 text-sm italic">空闲</p>`}
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <button onclick="${isIdle ? `handleBorrow(${device.id})` : `handleReturn(${device.id})`}" class="py-3 rounded-xl font-bold transition ${isIdle ? 'bg-slate-900 text-white' : 'bg-amber-500 text-white'}">${isIdle ? '登记借取' : '归还'}</button>
-                            <button onclick="showHistory(${device.id})" class="py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition">记录</button>
-                        </div>
-                    </div>`;
+                        <span class="px-4 py-2 rounded-xl text-[10px] font-black uppercase ${isIdle?'bg-green-500 text-white':'bg-amber-500 text-white'}">${isIdle?'✓ 空闲':'⚠ 已借'}</span>
+                    </div>
+                    <div class="mb-6 min-h-[50px] flex flex-col justify-center border-t border-slate-50 pt-4">
+                        ${!isIdle?`<div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">${d.currentUser.charAt(0)}</div><div><p class="font-bold text-slate-800 text-sm leading-none">${d.currentUser}</p><p class="text-[9px] text-slate-400 mt-1">${d.borrowTime}</p></div></div>`:'<p class="text-slate-400 text-[10px] italic font-medium">设备在位 Ready</p>'}
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="openActionModal(${d.id},'${isIdle?'借取':'归还'}')" class="py-3 rounded-xl font-black text-sm transition-all active:scale-95 shadow-sm ${isIdle?'bg-slate-900 text-white':'bg-amber-500 text-white'}">${isIdle?'借取':'归还'}</button>
+                        <button onclick="showHistory(${d.id})" class="py-3 text-slate-500 font-bold bg-slate-50 rounded-xl text-xs hover:bg-slate-100 transition-all">记录</button>
+                    </div>
+                    <div class="mt-4 flex justify-end gap-3 opacity-20 hover:opacity-100 transition-all duration-300">
+                        <button onclick="openFormModal(${d.id})" class="text-[10px] font-bold text-slate-400 hover:text-indigo-600">✎ 编辑</button>
+                        <button onclick="deleteDevice(${d.id})" class="text-[10px] font-bold text-slate-300 hover:text-red-500">✕ 删除</button>
+                    </div>
+                </div>`;
             });
-            localStorage.setItem('phone_manager_local', JSON.stringify(devices));
         }
 
-        function deleteDevice(id) {
-            if(confirm('确定删除吗？')) {
-                devices = devices.filter(d => d.id !== id);
-                render();
-            }
+        function setFilter(t) {
+            currentFilter = t;
+            ['all', 'idle', 'busy'].forEach(i => {
+                const btn = document.getElementById(`btn-${i}`);
+                if(i === t) {
+                    btn.className = 'flex-1 px-6 py-2 rounded-lg text-sm bg-indigo-600 text-white shadow-sm transition-all';
+                } else {
+                    btn.className = 'flex-1 px-6 py-2 rounded-lg text-sm text-slate-600 transition-all';
+                }
+            });
+            render();
         }
 
-        // ... handleBorrow, handleReturn, showHistory 等函数保持不变 ...
-        // (此处为了简洁省略，请沿用上一版本中的代码)
-        
-        function handleBorrow(id) {
-            const name = prompt("登记人姓名:");
-            if (!name) return;
-            const device = devices.find(d => d.id === id);
-            const now = new Date().toLocaleString();
-            device.status = 'busy'; device.currentUser = name; device.borrowTime = now;
-            device.history.unshift({ type: '借取', user: name, time: now });
-            render();
+        // 基础交互函数
+        function openFormModal(id=null) { 
+            const d = id ? devices.find(i=>i.id===id) : {id:"",name:"",os:""};
+            document.getElementById('edit-id').value=d.id; document.getElementById('input-name').value=d.name; document.getElementById('input-os').value=d.os;
+            document.getElementById('form-modal').classList.add('active'); 
         }
-        function handleReturn(id) {
-            const device = devices.find(d => d.id === id);
-            const name = prompt("确认姓名:", device.currentUser);
-            if (!name) return;
-            device.history.unshift({ type: '归还', user: name, time: new Date().toLocaleString() });
-            device.status = 'idle'; device.currentUser = ''; device.borrowTime = '';
-            render();
+        function saveDeviceInfo() {
+            const id=document.getElementById('edit-id').value, name=document.getElementById('input-name').value.trim(), os=document.getElementById('input-os').value.trim();
+            if(!name) return; let d=id?devices.find(i=>i.id==id):{id:Date.now(),name,os,status:'idle',currentUser:'',borrowTime:'',history:[]};
+            d.name=name; d.os=os; if(!id) devices.push(d); save(d); closeModal('form-modal'); render();
+        }
+        function openActionModal(id, type) {
+            const d = devices.find(i=>i.id===id);
+            document.getElementById('action-id').value=id; document.getElementById('action-type').value=type;
+            document.getElementById('action-user').value=(type==='归还')?d.currentUser:"";
+            document.getElementById('action-title').innerText=`${type}登记`;
+            document.getElementById('action-confirm-btn').className=`flex-1 py-4 text-white rounded-2xl font-bold shadow-lg ${type==='借取'?'bg-slate-900':'bg-emerald-600'}`;
+            document.getElementById('action-modal').classList.add('active');
+        }
+        function confirmAction() {
+            const id=Number(document.getElementById('action-id').value), type=document.getElementById('action-type').value, user=document.getElementById('action-user').value.trim();
+            if(!user) return; const d=devices.find(i=>i.id===id), now=new Date().toLocaleString();
+            if(type==='借取'){ d.status='busy'; d.currentUser=user; d.borrowTime=now; } else { d.status='idle'; d.currentUser=''; d.borrowTime=''; }
+            d.history.unshift({type,user,time:now}); save(d); closeModal('action-modal'); render();
         }
         function showHistory(id) {
-            const device = devices.find(d => d.id === id);
-            const modal = document.getElementById('history-modal');
-            const content = document.getElementById('modal-content');
-            document.getElementById('modal-title').innerText = device.name;
-            content.innerHTML = device.history.map(h => `<div class="mb-2 text-sm"><b>${h.type}</b>: ${h.user} (${h.time})</div>`).join('') || '暂无记录';
-            modal.classList.add('active');
+            const d=devices.find(i=>i.id===id);
+            document.getElementById('hist-content').innerHTML=d.history.map(h=>`<div class="p-3 bg-slate-50 rounded-xl flex justify-between text-xs font-bold border-l-4 ${h.type==='借取'?'border-amber-400':'border-green-500'}"><span>${h.type}:${h.user}</span><span class="text-slate-400 font-normal">${h.time}</span></div>`).join('')||'无';
+            document.getElementById('history-modal').classList.add('active');
         }
-        function closeModal() { document.getElementById('history-modal').classList.remove('active'); }
-        function openAddModal() {
-            const name = prompt("型号:");
-            if (name) { devices.push({ id: Date.now(), name, status: 'idle', currentUser: '', borrowTime: '', history: [] }); render(); }
-        }
-
-        render();
+        function deleteDevice(id){ if(confirm("确定删除？")){ devices=devices.filter(d=>d.id!==id); db.transaction(STORES.DATA,'readwrite').objectStore(STORES.DATA).delete(id); render(); } }
+        function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+        function importExcel(input) { const reader = new FileReader(); reader.onload = (e) => { const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' }); XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 }).forEach(row => { if(row[0]) { const d = { id: Date.now()+Math.random(), name: row[0].toString(), os: row[1]?row[1].toString():'', status: 'idle', currentUser: '', borrowTime: '', history: [] }; devices.push(d); save(d); } }); render(); }; reader.readAsArrayBuffer(input.files[0]); }
+        
+        async function start() { await initDB(); await sync(); runAutoSnapshot(); }
+        start();
     </script>
 </body>
 </html>
