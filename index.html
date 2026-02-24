@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>设备借阅中心 - 有借有还再借不难</title>
+    <title>测试机管理中心</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
@@ -12,17 +12,20 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .admin-menu { display: flex; flex-direction: column; gap: 8px; opacity: 0; pointer-events: none; transform: translateY(10px); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         .admin-menu.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
-        .admin-trigger { transition: transform 0.3s; }
+        .admin-trigger { transition: transform 0.3s; cursor: pointer; }
         .admin-trigger.open { transform: rotate(90deg); background-color: #475569 !important; }
+        #btn-restore-snap { display: none; }
+        #btn-restore-snap.unlocked { display: block; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
-<body class="bg-slate-100 min-h-screen pb-24 font-sans">
+<body class="bg-slate-100 min-h-screen pb-24 font-sans text-slate-900">
 
     <div class="max-w-6xl mx-auto px-4 pt-8">
         <header class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
-                <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">设备借阅中心</h1>
-                <p id="snapshot-status" class="text-slate-400 text-xs mt-1 font-medium font-mono italic">数据受 7 日自动快照保护</p>
+                <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">测试机管理中心</h1>
+                <p id="snapshot-status" class="text-slate-400 text-xs mt-1 font-medium font-mono italic">数据受 7 日快照保护</p>
             </div>
             <div class="flex gap-2 justify-center">
                 <input type="file" id="excel-upload" accept=".xlsx, .xls, .csv" class="hidden" onchange="importExcel(this)">
@@ -31,15 +34,15 @@
             </div>
         </header>
 
-        <div class="bg-white p-4 rounded-2xl shadow-sm mb-8 flex flex-col lg:flex-row gap-4 items-center">
+        <div class="bg-white p-4 rounded-2xl shadow-sm mb-8 flex flex-col lg:flex-row gap-4 items-center border border-slate-200">
             <div class="relative flex-1 w-full">
                 <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-                <input type="text" id="search-input" oninput="render()" placeholder="搜索设备、版本、借用人…" class="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+                <input type="text" id="search-input" oninput="render()" placeholder="型号、系统、人名、手机号(完全匹配)..." class="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
             <div class="flex gap-1 bg-slate-100 p-1 rounded-xl w-full lg:w-auto font-bold">
-                <button onclick="setFilter('all')" id="btn-all" class="flex-1 px-6 py-2 rounded-lg text-sm bg-indigo-600 text-white shadow-sm transition-all">全部</button>
-                <button onclick="setFilter('idle')" id="btn-idle" class="flex-1 px-6 py-2 rounded-lg text-sm text-slate-600 transition-all">空闲</button>
-                <button onclick="setFilter('busy')" id="btn-busy" class="flex-1 px-6 py-2 rounded-lg text-sm text-slate-600 transition-all">借出</button>
+                <button onclick="setFilter('all')" id="btn-all" class="flex-1 px-6 py-2 rounded-lg text-sm bg-indigo-600 text-white shadow-sm">全部</button>
+                <button onclick="setFilter('idle')" id="btn-idle" class="flex-1 px-6 py-2 rounded-lg text-sm text-slate-600">空闲</button>
+                <button onclick="setFilter('busy')" id="btn-busy" class="flex-1 px-6 py-2 rounded-lg text-sm text-slate-600">借出</button>
             </div>
         </div>
 
@@ -48,44 +51,40 @@
 
     <div class="fixed bottom-6 right-6 flex flex-col items-end gap-3 z-40">
         <div id="admin-menu" class="admin-menu">
-            <button onclick="restoreFromSnapshot()" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold shadow-lg hover:bg-amber-700">恢复 7 日前快照</button>
+            <button id="btn-restore-snap" onclick="restoreFromSnapshot()" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold shadow-lg hover:bg-amber-700">⚠️ 恢复 7 日前快照</button>
             <button onclick="document.getElementById('file-backup-import').click()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-lg hover:bg-blue-700">导入备份文件</button>
-            <button onclick="exportBackup()" class="px-4 py-2 bg-slate-500 text-white rounded-lg text-xs font-bold shadow-lg hover:bg-slate-600">手动导出备份</button>
+            <button onclick="exportBackup()" class="px-4 py-2 bg-slate-500 text-white rounded-lg text-xs font-bold shadow-lg hover:bg-slate-600">导出当前备份</button>
             <input type="file" id="file-backup-import" accept=".json" class="hidden" onchange="importBackup(this)">
         </div>
-        <button id="admin-trigger" onclick="toggleAdminMenu()" class="admin-trigger w-12 h-12 bg-slate-800 text-white rounded-full shadow-2xl flex items-center justify-center text-xl hover:scale-110 active:scale-90 transition-all">
-            ⚙️
-        </button>
+        <button id="admin-trigger" onclick="handleAdminTrigger()" class="admin-trigger w-14 h-14 bg-slate-800 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl hover:scale-105 active:scale-95 transition-all">⚙️</button>
     </div>
 
     <div id="form-modal" class="modal items-center justify-center p-4">
         <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-8">
-            <h3 class="font-bold mb-4">设备信息录入</h3>
+            <h3 class="font-bold mb-6 text-xl">设备信息维护</h3>
             <input type="hidden" id="edit-id">
-            <input type="text" id="input-name" placeholder="型号" class="w-full px-4 py-3 border rounded-xl mb-3 outline-none focus:ring-2 focus:ring-indigo-500">
-            <input type="text" id="input-os" placeholder="系统版本" class="w-full px-4 py-3 border rounded-xl mb-6 outline-none focus:ring-2 focus:ring-indigo-500">
-            <button onclick="saveDeviceInfo()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black">保存信息</button>
+            <div class="space-y-3">
+                <input type="text" id="input-name" placeholder="型号" class="w-full px-4 py-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold">
+                <input type="text" id="input-os" placeholder="系统" class="w-full px-4 py-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500">
+                <input type="text" id="input-phone" placeholder="手机号" class="w-full px-4 py-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-indigo-600">
+            </div>
+            <button onclick="saveDeviceInfo()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black mt-8 shadow-lg">保存</button>
             <button onclick="closeModal('form-modal')" class="w-full mt-2 text-slate-400 text-sm py-2">取消</button>
         </div>
     </div>
-
     <div id="action-modal" class="modal items-center justify-center p-4">
         <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center">
             <div id="action-icon" class="text-4xl mb-4">👤</div>
             <h3 id="action-title" class="text-xl font-bold mb-6">登记</h3>
             <input type="hidden" id="action-id"><input type="hidden" id="action-type">
             <input type="text" id="action-user" placeholder="输入姓名" class="w-full px-4 py-4 bg-slate-50 border rounded-2xl outline-none text-center font-bold text-lg mb-8 shadow-inner">
-            <div class="flex gap-3">
-                <button onclick="closeModal('action-modal')" class="flex-1 py-4 bg-slate-100 rounded-2xl font-bold text-slate-500">取消</button>
-                <button id="action-confirm-btn" onclick="confirmAction()" class="flex-1 py-4 text-white rounded-2xl font-bold transition-all active:scale-95">确认</button>
-            </div>
+            <div class="flex gap-3"><button onclick="closeModal('action-modal')" class="flex-1 py-4 bg-slate-100 rounded-2xl font-bold text-slate-500">取消</button><button id="action-confirm-btn" onclick="confirmAction()" class="flex-1 py-4 text-white rounded-2xl font-bold transition-all active:scale-95">提交</button></div>
         </div>
     </div>
-
     <div id="history-modal" class="modal items-center justify-center p-4">
         <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh] overflow-hidden">
-            <div class="p-6 border-b flex justify-between bg-slate-50 items-center rounded-t-[2rem]"><h3 id="hist-title" class="font-bold">操作记录</h3><button onclick="closeModal('history-modal')" class="text-slate-400 p-2">✕</button></div>
-            <div id="hist-content" class="p-6 overflow-y-auto space-y-3 bg-white no-scrollbar"></div>
+            <div class="p-6 border-b flex justify-between bg-slate-50 items-center rounded-t-[2rem]"><h3 id="hist-title" class="font-bold ml-2">操作记录</h3><button onclick="closeModal('history-modal')" class="text-slate-400 p-2">✕</button></div>
+            <div id="hist-content" class="p-6 overflow-y-auto space-y-3 bg-white no-scrollbar font-medium"></div>
         </div>
     </div>
 
@@ -93,6 +92,21 @@
         const DB_NAME = 'DeviceManagerDB_V7';
         const STORES = { DATA: 'devices', SNAPSHOT: 'snapshot', CONFIG: 'config' };
         let db, devices = [], currentFilter = 'all';
+
+        // 隐藏彩蛋逻辑
+        let clickCount = 0, lastClick = 0;
+        function handleAdminTrigger() {
+            const now = Date.now();
+            if (now - lastClick < 500) clickCount++; else clickCount = 1;
+            lastClick = now;
+            if (clickCount >= 5) { document.getElementById('btn-restore-snap').classList.add('unlocked'); }
+            toggleAdminMenu();
+        }
+
+        function toggleAdminMenu() {
+            document.getElementById('admin-menu').classList.toggle('show');
+            document.getElementById('admin-trigger').classList.toggle('open');
+        }
 
         const initDB = () => {
             return new Promise((res) => {
@@ -124,72 +138,59 @@
         }
 
         function updateSnapUI(ts) {
-            document.getElementById('snapshot-status').innerText = ts ? `快照保护中 (上次自动存盘: ${new Date(ts).toLocaleDateString()})` : "数据库就绪";
-        }
-
-        function toggleAdminMenu() {
-            document.getElementById('admin-menu').classList.toggle('show');
-            document.getElementById('admin-trigger').classList.toggle('open');
+            document.getElementById('snapshot-status').innerText = ts ? `上次快照: ${new Date(ts).toLocaleDateString()}` : "保护就绪";
         }
 
         function restoreFromSnapshot() {
-            if (!confirm("确定要恢复到 7 天前的快照吗？")) return;
+            if (!confirm("⚠️ 恢复快照？")) return;
             const tx = db.transaction([STORES.DATA, STORES.SNAPSHOT], 'readwrite');
             tx.objectStore(STORES.SNAPSHOT).getAll().onsuccess = (e) => {
                 const data = e.target.result;
-                if (!data.length) return alert("暂无可用快照");
                 const store = tx.objectStore(STORES.DATA);
                 store.clear(); data.forEach(i => store.put(i));
                 tx.oncomplete = () => window.location.reload();
             };
-        }
-
-        function importBackup(input) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const data = JSON.parse(e.target.result);
-                const tx = db.transaction(STORES.DATA, 'readwrite');
-                const store = tx.objectStore(STORES.DATA);
-                store.clear(); data.forEach(i => store.put(i));
-                tx.oncomplete = () => window.location.reload();
-            };
-            reader.readAsText(input.files[0]);
-        }
-
-        function exportBackup() {
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(new Blob([JSON.stringify(devices, null, 2)], {type:'application/json'}));
-            a.download = `Backup_${new Date().toISOString().slice(0,10)}.json`;
-            a.click();
         }
 
         async function sync() { db.transaction(STORES.DATA, 'readonly').objectStore(STORES.DATA).getAll().onsuccess = (e) => { devices = e.target.result || []; render(); }; }
         function save(d) { db.transaction(STORES.DATA, 'readwrite').objectStore(STORES.DATA).put(JSON.parse(JSON.stringify(d))); }
         
-        // 渲染函数 (包含筛选逻辑)
+        // --- 核心逻辑：精准匹配手机号 ---
         function render() {
-            const list = document.getElementById('device-list'), kw = document.getElementById('search-input').value.toLowerCase();
+            const list = document.getElementById('device-list');
+            const kw = document.getElementById('search-input').value.trim().toLowerCase();
             list.innerHTML = '';
             
-            const filtered = devices.filter(d => {
-                const matchesSearch = (d.name + d.os + d.currentUser).toLowerCase().includes(kw);
-                const matchesFilter = currentFilter === 'all' || d.status === currentFilter;
-                return matchesSearch && matchesFilter;
-            });
+            devices.filter(d => {
+                const matchesFilter = (currentFilter === 'all' || d.status === currentFilter);
+                if (!matchesFilter) return false;
+                if (!kw) return true;
 
-            filtered.forEach(d => {
+                // 手机号：精准匹配 (录入的 phone 必须等于输入的 kw)
+                const isPhoneMatch = (d.phone || '').toLowerCase() === kw;
+                // 其他：模糊匹配
+                const isOtherMatch = (
+                    d.name.toLowerCase().includes(kw) || 
+                    (d.os || '').toLowerCase().includes(kw) || 
+                    (d.currentUser || '').toLowerCase().includes(kw)
+                );
+                return isPhoneMatch || isOtherMatch;
+            }).forEach(d => {
                 const isIdle = d.status === 'idle';
                 list.innerHTML += `
                 <div class="bg-white rounded-[2rem] p-6 shadow-sm border-4 ${isIdle?'border-transparent':'border-amber-400'} transition-all hover:shadow-md">
                     <div class="flex justify-between items-start mb-4">
                         <div class="flex-1">
                             <h3 class="text-xl font-black text-slate-800 break-all leading-tight">${d.name}</h3>
-                            <p class="text-xs text-indigo-600 font-bold mt-1">${d.os||'未知版本'}</p>
+                            <div class="flex flex-wrap gap-2 mt-2">
+                                <span class="text-xs text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-md">${d.os||'未知'}</span>
+                                ${d.phone ? `<span class="text-[10px] text-slate-500 font-mono bg-slate-100 px-2 py-0.5 rounded-md">📞 ${d.phone}</span>` : ''}
+                            </div>
                         </div>
                         <span class="px-4 py-2 rounded-xl text-[10px] font-black uppercase ${isIdle?'bg-green-500 text-white':'bg-amber-500 text-white'}">${isIdle?'✓ 空闲':'⚠ 已借'}</span>
                     </div>
                     <div class="mb-6 min-h-[50px] flex flex-col justify-center border-t border-slate-50 pt-4">
-                        ${!isIdle?`<div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">${d.currentUser.charAt(0)}</div><div><p class="font-bold text-slate-800 text-sm leading-none">${d.currentUser}</p><p class="text-[9px] text-slate-400 mt-1">${d.borrowTime}</p></div></div>`:'<p class="text-slate-400 text-[10px] italic font-medium">设备在位 Ready</p>'}
+                        ${!isIdle?`<div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">${d.currentUser.charAt(0)}</div><div><p class="font-bold text-slate-800 text-sm leading-none">${d.currentUser}</p><p class="text-[9px] text-slate-400 mt-1">${d.borrowTime}</p></div></div>`:'<p class="text-slate-400 text-[10px] italic font-medium">Ready</p>'}
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         <button onclick="openActionModal(${d.id},'${isIdle?'借取':'归还'}')" class="py-3 rounded-xl font-black text-sm transition-all active:scale-95 shadow-sm ${isIdle?'bg-slate-900 text-white':'bg-amber-500 text-white'}">${isIdle?'借取':'归还'}</button>
@@ -203,52 +204,28 @@
             });
         }
 
-        function setFilter(t) {
-            currentFilter = t;
-            ['all', 'idle', 'busy'].forEach(i => {
-                const btn = document.getElementById(`btn-${i}`);
-                if(i === t) {
-                    btn.className = 'flex-1 px-6 py-2 rounded-lg text-sm bg-indigo-600 text-white shadow-sm transition-all';
-                } else {
-                    btn.className = 'flex-1 px-6 py-2 rounded-lg text-sm text-slate-600 transition-all';
-                }
-            });
-            render();
-        }
-
-        // 基础交互函数
-        function openFormModal(id=null) { 
-            const d = id ? devices.find(i=>i.id===id) : {id:"",name:"",os:""};
-            document.getElementById('edit-id').value=d.id; document.getElementById('input-name').value=d.name; document.getElementById('input-os').value=d.os;
-            document.getElementById('form-modal').classList.add('active'); 
-        }
-        function saveDeviceInfo() {
-            const id=document.getElementById('edit-id').value, name=document.getElementById('input-name').value.trim(), os=document.getElementById('input-os').value.trim();
-            if(!name) return; let d=id?devices.find(i=>i.id==id):{id:Date.now(),name,os,status:'idle',currentUser:'',borrowTime:'',history:[]};
-            d.name=name; d.os=os; if(!id) devices.push(d); save(d); closeModal('form-modal'); render();
-        }
-        function openActionModal(id, type) {
-            const d = devices.find(i=>i.id===id);
-            document.getElementById('action-id').value=id; document.getElementById('action-type').value=type;
-            document.getElementById('action-user').value=(type==='归还')?d.currentUser:"";
-            document.getElementById('action-title').innerText=`${type}登记`;
-            document.getElementById('action-confirm-btn').className=`flex-1 py-4 text-white rounded-2xl font-bold shadow-lg ${type==='借取'?'bg-slate-900':'bg-emerald-600'}`;
-            document.getElementById('action-modal').classList.add('active');
-        }
-        function confirmAction() {
-            const id=Number(document.getElementById('action-id').value), type=document.getElementById('action-type').value, user=document.getElementById('action-user').value.trim();
-            if(!user) return; const d=devices.find(i=>i.id===id), now=new Date().toLocaleString();
-            if(type==='借取'){ d.status='busy'; d.currentUser=user; d.borrowTime=now; } else { d.status='idle'; d.currentUser=''; d.borrowTime=''; }
-            d.history.unshift({type,user,time:now}); save(d); closeModal('action-modal'); render();
-        }
-        function showHistory(id) {
-            const d=devices.find(i=>i.id===id);
-            document.getElementById('hist-content').innerHTML=d.history.map(h=>`<div class="p-3 bg-slate-50 rounded-xl flex justify-between text-xs font-bold border-l-4 ${h.type==='借取'?'border-amber-400':'border-green-500'}"><span>${h.type}:${h.user}</span><span class="text-slate-400 font-normal">${h.time}</span></div>`).join('')||'无';
-            document.getElementById('history-modal').classList.add('active');
-        }
+        // 业务交互略 (同上版)
+        function setFilter(t) { currentFilter = t; ['all','idle','busy'].forEach(i => document.getElementById(`btn-${i}`).className = i === t ? 'flex-1 px-6 py-2 rounded-lg text-sm bg-indigo-600 text-white shadow-sm' : 'flex-1 px-6 py-2 rounded-lg text-sm text-slate-600'); render(); }
+        function openFormModal(id=null) { const d = id ? devices.find(i=>i.id===id) : {id:"",name:"",os:"",phone:""}; document.getElementById('edit-id').value=d.id; document.getElementById('input-name').value=d.name; document.getElementById('input-os').value=d.os; document.getElementById('input-phone').value=d.phone; document.getElementById('form-modal').classList.add('active'); lockBodyScroll() }
+        function saveDeviceInfo() { const id=document.getElementById('edit-id').value, name=document.getElementById('input-name').value.trim(), os=document.getElementById('input-os').value.trim(), phone=document.getElementById('input-phone').value.trim(); if(!name) return; let d=id?devices.find(i=>i.id==id):{id:Date.now(),name,os,phone,status:'idle',currentUser:'',borrowTime:'',history:[]}; d.name=name; d.os=os; d.phone=phone; if(!id) devices.push(d); save(d); closeModal('form-modal'); render(); }
+        function openActionModal(id, type) { const d = devices.find(i=>i.id===id); document.getElementById('action-id').value=id; document.getElementById('action-type').value=type; document.getElementById('action-user').value=(type==='归还')?d.currentUser:""; document.getElementById('action-title').innerText=`${type}登记`; document.getElementById('action-confirm-btn').className=`flex-1 py-4 text-white rounded-2xl font-bold shadow-lg ${type==='借取'?'bg-slate-900':'bg-emerald-600'}`; document.getElementById('action-modal').classList.add('active'); lockBodyScroll();}
+        function confirmAction() { const id=Number(document.getElementById('action-id').value), type=document.getElementById('action-type').value, user=document.getElementById('action-user').value.trim(); if(!user) return; const d=devices.find(i=>i.id===id), now=new Date().toLocaleString(); if(type==='借取'){ d.status='busy'; d.currentUser=user; d.borrowTime=now; } else { d.status='idle'; d.currentUser=''; d.borrowTime=''; } d.history.unshift({type,user,time:now}); save(d); closeModal('action-modal'); render(); }
+        function showHistory(id) { const d=devices.find(i=>i.id===id); document.getElementById('hist-content').innerHTML=d.history.map(h=>`<div class="p-3 bg-slate-50 rounded-xl flex justify-between text-xs font-bold border-l-4 ${h.type==='借取'?'border-amber-400':'border-green-500'}"><span>${h.type}:${h.user}</span><span class="text-slate-400 font-normal">${h.time}</span></div>`).join('')||'无'; document.getElementById('history-modal').classList.add('active'); lockBodyScroll();}
         function deleteDevice(id){ if(confirm("确定删除？")){ devices=devices.filter(d=>d.id!==id); db.transaction(STORES.DATA,'readwrite').objectStore(STORES.DATA).delete(id); render(); } }
-        function closeModal(id){ document.getElementById(id).classList.remove('active'); }
-        function importExcel(input) { const reader = new FileReader(); reader.onload = (e) => { const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' }); XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 }).forEach(row => { if(row[0]) { const d = { id: Date.now()+Math.random(), name: row[0].toString(), os: row[1]?row[1].toString():'', status: 'idle', currentUser: '', borrowTime: '', history: [] }; devices.push(d); save(d); } }); render(); }; reader.readAsArrayBuffer(input.files[0]); }
+        function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+    // 只有当没有活跃弹窗时才恢复滚动
+    if (!document.querySelector('.modal.active')) {
+        document.body.style.overflow = '';
+    }
+}
+
+function lockBodyScroll() {
+    document.body.style.overflow = 'hidden';
+}
+        function exportBackup() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(devices, null, 2)], {type:'application/json'})); a.download = `Backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); }
+        function importBackup(input) { const reader = new FileReader(); reader.onload = (e) => { const data = JSON.parse(e.target.result); const tx = db.transaction(STORES.DATA, 'readwrite'); const store = tx.objectStore(STORES.DATA); store.clear(); data.forEach(i => store.put(i)); tx.oncomplete = () => window.location.reload(); }; reader.readAsText(input.files[0]); }
+        function importExcel(input) { const reader = new FileReader(); reader.onload = (e) => { const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' }); XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 }).forEach(row => { if(row[0]) { const d = { id: Date.now()+Math.random(), name: row[0].toString(), os: row[1]?row[1].toString():'', phone: row[2]?row[2].toString():'', status: 'idle', currentUser: '', borrowTime: '', history: [] }; devices.push(d); save(d); } }); render(); }; reader.readAsArrayBuffer(input.files[0]); }
         
         async function start() { await initDB(); await sync(); runAutoSnapshot(); }
         start();
